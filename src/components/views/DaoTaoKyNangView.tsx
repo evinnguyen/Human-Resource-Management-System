@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { KhoaDaoTao, QuaTrinhDaoTao, KetQuaDaoTao } from '@/types/hrms';
+import { formatKetQuaDaoTao } from '@/utils/formatters';
 import {
   GraduationCap,
   Award,
@@ -257,7 +258,7 @@ export const DaoTaoKyNangView: React.FC = () => {
                             : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                         }`}
                       >
-                        {qtdt.KetQua}
+                        {formatKetQuaDaoTao(qtdt.KetQua)}
                       </span>
                     </td>
                     <td className="py-4 pr-6 text-right">

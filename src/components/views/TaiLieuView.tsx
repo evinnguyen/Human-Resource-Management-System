@@ -15,6 +15,7 @@ import {
   X,
   FileCheck,
 } from 'lucide-react';
+import { ProofUpload } from '@/components/common/ImageUpload';
 
 export const TaiLieuView: React.FC = () => {
   const {
@@ -180,13 +181,16 @@ export const TaiLieuView: React.FC = () => {
                   </td>
                   <td className="py-4 pr-6 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => alert(`Đang tải file: ${tl.TenTL}`)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800"
-                        title="Tải về"
+                      <a
+                        href={tl.DuongDan}
+                        target="_blank"
+                        rel="noreferrer"
+                        download
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 transition"
+                        title="Xem hoặc tải về tài liệu"
                       >
                         <Download className="h-4 w-4" />
-                      </button>
+                      </a>
                       <button
                         onClick={() => {
                           if (confirm(`Bạn có chắc muốn xóa tài liệu ${tl.TenTL}?`)) {
@@ -277,12 +281,21 @@ export const TaiLieuView: React.FC = () => {
                 />
               </div>
 
-              <div className="rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center dark:border-slate-700">
-                <Upload className="mx-auto h-8 w-8 text-indigo-500" />
-                <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Kéo thả file vào đây hoặc nhấn để chọn
-                </p>
-                <p className="text-[10px] text-slate-400">PDF, DOCX, PNG, JPG (tối đa 25MB)</p>
+              <div>
+                <ProofUpload
+                  label="Tải lên tệp tài liệu gốc (Không cần nhập link):"
+                  placeholder="Kéo thả hoặc nhấn để chọn tài liệu PDF, DOCX, ảnh bằng cấp, CCCD..."
+                  value={uploadForm.DuongDan !== '/uploads/documents/document.pdf' ? uploadForm.DuongDan : ''}
+                  onChange={url => {
+                    const filename = url.split('/').pop() || '';
+                    setUploadForm(prev => ({
+                      ...prev,
+                      DuongDan: url,
+                      TenTL: prev.TenTL || filename,
+                    }));
+                  }}
+                  folder="documents"
+                />
               </div>
 
               <div className="mt-4 flex justify-end gap-2">

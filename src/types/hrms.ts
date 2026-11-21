@@ -76,6 +76,7 @@ export interface DonNghiPhep {
   TenNguoiDuyet?: string | null;
   LyDo: string;
   PhanHoi?: string;
+  MinhChung?: string;
 }
 
 export interface ThoiDiem {
@@ -169,6 +170,7 @@ export type TrangThaiTaiKhoan = 'HOAT_DONG' | 'KHOA' | 'CHO_KICH_HOAT';
 export interface TaiKhoan {
   MaTK: string;
   TenDangNhap: string;
+  MatKhau?: string;
   MaNhanVien: string;
   TenNhanVien?: string;
   Email?: string;

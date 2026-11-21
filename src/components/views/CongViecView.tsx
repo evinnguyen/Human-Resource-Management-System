@@ -25,9 +25,21 @@ import {
   History,
   X,
 } from 'lucide-react';
+import { ProofUpload, ProofBadgeViewer } from '@/components/common/ImageUpload';
 
 export const CongViecView: React.FC = () => {
   const { congViecs, tienDoThucHiens, nhanViens, currentTaiKhoan, addCongViec, addTienDoThucHien } = useHrms();
+
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const isEmployee = userRole === 'ROLE_EMPLOYEE';
+  const isDeptLead = userRole === 'ROLE_DEPT_LEAD';
+  const isHRorAdmin = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_HR_MANAGER';
+  const canAssignTask = isHRorAdmin || isDeptLead;
+
+  const currentEmp = nhanViens.find(n => n.MaNhanVien === currentTaiKhoan?.MaNhanVien);
+
+  // Scope filter: ALL_SCOPE (Dept/Company) vs MY_TASKS
+  const [scopeFilter, setScopeFilter] = useState<'ALL_SCOPE' | 'MY_TASKS'>(isEmployee ? 'MY_TASKS' : 'ALL_SCOPE');
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,19 +56,48 @@ export const CongViecView: React.FC = () => {
   const [progressNote, setProgressNote] = useState<string>('');
   const [progressFile, setProgressFile] = useState<string>('');
 
+  // Assignable employees based on role
+  const assignableEmployees = nhanViens.filter(n => {
+    if (isDeptLead) return n.MaPhongBan === currentEmp?.MaPhongBan;
+    return true;
+  });
+
   // Modal State for New Task
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newDeadline, setNewDeadline] = useState('');
   const [newPriority, setNewPriority] = useState<MucDoUuTien>('TRUNG_BINH');
-  const [newAssignee, setNewAssignee] = useState(nhanViens[0]?.MaNhanVien || 'NV003');
+  const [newAssignee, setNewAssignee] = useState(assignableEmployees[0]?.MaNhanVien || currentTaiKhoan?.MaNhanVien || '');
 
-  // Filter tasks
+  // Keep newAssignee in sync with assignable employees
+  React.useEffect(() => {
+    if (showNewTaskModal && assignableEmployees.length > 0) {
+      if (!assignableEmployees.some(e => e.MaNhanVien === newAssignee)) {
+        setNewAssignee(assignableEmployees[0].MaNhanVien);
+      }
+    }
+  }, [showNewTaskModal, assignableEmployees, newAssignee]);
+
+  // Filter tasks based on role and scope
   const filteredTasks = congViecs.filter(task => {
+    if (isEmployee || scopeFilter === 'MY_TASKS') {
+      if (task.MaNhanVien !== currentTaiKhoan?.MaNhanVien) return false;
+    } else if (isDeptLead && scopeFilter === 'ALL_SCOPE') {
+      const emp = nhanViens.find(n => n.MaNhanVien === task.MaNhanVien);
+      const isMyDeptEmp = emp && emp.MaPhongBan === currentEmp?.MaPhongBan;
+      const isAssignedToMe = task.MaNhanVien === currentTaiKhoan?.MaNhanVien;
+      const isAssignedByMe = task.NguoiGiao === currentTaiKhoan?.MaNhanVien;
+      if (!isMyDeptEmp && !isAssignedToMe && !isAssignedByMe) {
+        return false;
+      }
+    }
+
     const matchSearch =
       task.TenCV.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.MaCV.toLowerCase().includes(searchTerm.toLowerCase());
+      task.MaCV.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.TenNhanVien && task.TenNhanVien.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchStatus = filterStatus === 'ALL' || task.TrangThai === filterStatus;
     const matchPriority = filterPriority === 'ALL' || task.MucDoUuTien === filterPriority;
     return matchSearch && matchStatus && matchPriority;
@@ -158,10 +199,10 @@ export const CongViecView: React.FC = () => {
       setSelectedTask(prev =>
         prev
           ? {
-              ...prev,
-              MucDoHoanThanh: Number(progressValue),
-              TrangThai: Number(progressValue) >= 100 ? 'HOAN_THANH' : 'DANG_THUC_HIEN',
-            }
+            ...prev,
+            MucDoHoanThanh: Number(progressValue),
+            TrangThai: Number(progressValue) >= 100 ? 'HOAN_THANH' : 'DANG_THUC_HIEN',
+          }
           : null
       );
     }
@@ -170,29 +211,57 @@ export const CongViecView: React.FC = () => {
   };
 
   // Submit New Task
-  const handleCreateTask = (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim()) {
+      alert('Vui lòng nhập tên công việc!');
+      return;
+    }
 
-    const assignedPerson = nhanViens.find(n => n.MaNhanVien === newAssignee);
+    const today = new Date().toISOString().slice(0, 10);
+    if (newDeadline && newDeadline < today) {
+      alert('Hạn chót công việc không thể trước ngày giao việc (hôm nay)!');
+      return;
+    }
 
-    addCongViec({
-      TenCV: newTitle,
-      MoTaCV: newDescription,
-      HanChot: newDeadline || '2026-10-31',
-      NguoiGiao: currentTaiKhoan.MaNhanVien,
-      TenNguoiGiao: currentTaiKhoan.TenNhanVien,
-      NgayGiao: new Date().toISOString().slice(0, 10),
-      MucDoUuTien: newPriority,
-      MaNhanVien: newAssignee,
-      TenNhanVien: assignedPerson?.HoTen || 'Nhân viên',
-      TrangThai: 'CHUA_BAT_DAU',
-    });
+    const targetAssignee = newAssignee || assignableEmployees[0]?.MaNhanVien;
+    if (!targetAssignee) {
+      alert('Vui lòng chọn nhân viên thực hiện!');
+      return;
+    }
 
-    setShowNewTaskModal(false);
-    setNewTitle('');
-    setNewDescription('');
-    setNewDeadline('');
+    const assignedPerson = nhanViens.find(n => n.MaNhanVien === targetAssignee);
+
+    try {
+      setIsSubmittingTask(true);
+      await addCongViec({
+        TenCV: newTitle.trim(),
+        MoTaCV: newDescription.trim(),
+        HanChot: newDeadline || today,
+        NguoiGiao: currentTaiKhoan.MaNhanVien,
+        TenNguoiGiao: currentTaiKhoan.TenNhanVien,
+        NgayGiao: today,
+        MucDoUuTien: newPriority,
+        MaNhanVien: targetAssignee,
+        TenNhanVien: assignedPerson?.HoTen || 'Nhân viên',
+        TrangThai: 'CHUA_BAT_DAU',
+      });
+
+      // Switch scope filter and clear search to make sure the created task is immediately visible
+      setScopeFilter('ALL_SCOPE');
+      setSearchTerm('');
+      setFilterStatus('ALL');
+      setFilterPriority('ALL');
+
+      setShowNewTaskModal(false);
+      setNewTitle('');
+      setNewDescription('');
+      setNewDeadline('');
+    } catch (err: any) {
+      alert('Lỗi khi giao công việc: ' + (err?.message || 'Không thể tạo bản ghi công việc'));
+    } finally {
+      setIsSubmittingTask(false);
+    }
   };
 
   // ==========================================
@@ -214,12 +283,14 @@ export const CongViecView: React.FC = () => {
             <ArrowLeft className="h-4 w-4" /> Quay lại danh sách công việc
           </button>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleOpenProgressModal(selectedTask)}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
-            >
-              <TrendingUp className="h-4 w-4" /> Cập nhật tiến độ
-            </button>
+            {(isHRorAdmin || isDeptLead || selectedTask.MaNhanVien === currentTaiKhoan.MaNhanVien) && (
+              <button
+                onClick={() => handleOpenProgressModal(selectedTask)}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
+              >
+                <TrendingUp className="h-4 w-4" /> Cập nhật tiến độ
+              </button>
+            )}
           </div>
         </div>
 
@@ -326,9 +397,8 @@ export const CongViecView: React.FC = () => {
                         <p className="mt-2 text-sm text-slate-700">{progress.GhiChu}</p>
 
                         {progress.TepMinhChung && (
-                          <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-600 border border-slate-200">
-                            <Paperclip className="h-3.5 w-3.5 text-indigo-500" /> Minh chứng:{' '}
-                            <span className="font-semibold">{progress.TepMinhChung}</span>
+                          <div className="mt-2">
+                            <ProofBadgeViewer url={progress.TepMinhChung} title="Ảnh minh chứng hoàn thành" />
                           </div>
                         )}
 
@@ -407,19 +477,50 @@ export const CongViecView: React.FC = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Quản Lý Công Việc & Tiến Độ Thực Hiện
+            {isEmployee ? 'Công Việc Của Tôi & Tiến Độ Thực Hiện' : 'Quản Lý Công Việc & Tiến Độ Thực Hiện'}
           </h1>
           <p className="text-sm text-slate-500">
-            Theo dõi, tra cứu nhiệm vụ được giao và báo cáo tiến độ công việc
+            {isEmployee
+              ? 'Theo dõi nhiệm vụ được phân công và cập nhật báo cáo tiến độ công việc cá nhân'
+              : 'Giao việc, theo dõi phân bổ nhiệm vụ và giám sát tiến độ thực hiện toàn công ty'}
           </p>
         </div>
-        <button
-          onClick={() => setShowNewTaskModal(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
-        >
-          <Plus className="h-4 w-4" /> Giao việc mới
-        </button>
+
+        {canAssignTask && (
+          <button
+            onClick={() => setShowNewTaskModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
+          >
+            <Plus className="h-4 w-4" /> Giao việc mới
+          </button>
+        )}
       </div>
+
+      {/* Scope switch for Managers / HR */}
+      {!isEmployee && (
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+          <button
+            onClick={() => setScopeFilter('ALL_SCOPE')}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+              scopeFilter === 'ALL_SCOPE'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            {isDeptLead ? `Công Việc Phòng Ban (${currentEmp?.TenPhongBan || 'Ban IT'})` : 'Toàn Bộ Công Việc Công Ty'}
+          </button>
+          <button
+            onClick={() => setScopeFilter('MY_TASKS')}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+              scopeFilter === 'MY_TASKS'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Việc Được Giao Cho Tôi ({congViecs.filter(c => c.MaNhanVien === currentTaiKhoan?.MaNhanVien).length})
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards Overview */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -552,13 +653,12 @@ export const CongViecView: React.FC = () => {
                         </div>
                         <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              task.MucDoHoanThanh >= 100
+                            className={`h-full rounded-full transition-all duration-300 ${task.MucDoHoanThanh >= 100
                                 ? 'bg-emerald-500'
                                 : task.TrangThai === 'TRE_HAN'
-                                ? 'bg-rose-500'
-                                : 'bg-indigo-600'
-                            }`}
+                                  ? 'bg-rose-500'
+                                  : 'bg-indigo-600'
+                              }`}
                             style={{ width: `${task.MucDoHoanThanh}%` }}
                           />
                         </div>
@@ -573,12 +673,14 @@ export const CongViecView: React.FC = () => {
                         >
                           Chi tiết
                         </button>
-                        <button
-                          onClick={() => handleOpenProgressModal(task)}
-                          className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition"
-                        >
-                          Tiến độ
-                        </button>
+                        {(isHRorAdmin || isDeptLead || task.MaNhanVien === currentTaiKhoan.MaNhanVien) && (
+                          <button
+                            onClick={() => handleOpenProgressModal(task)}
+                            className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition"
+                          >
+                            Tiến độ
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -674,17 +776,14 @@ export const CongViecView: React.FC = () => {
               />
             </div>
 
-            {/* File minh chứng */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Tệp minh chứng kết quả (nếu có):</label>
-              <input
-                type="text"
-                placeholder="Tên tệp hoặc link ảnh sản phẩm (vd: AnhNghiemThu_1810.jpg)"
-                value={progressFile}
-                onChange={e => setProgressFile(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
+            {/* File minh chứng upload trực tiếp */}
+            <ProofUpload
+              label="Ảnh minh chứng kết quả / Nghiệm thu (Không cần nhập link):"
+              placeholder="Nhấn hoặc kéo thả ảnh nghiệm thu, hiện trường, chi tiết máy vào đây"
+              value={progressFile}
+              onChange={url => setProgressFile(url)}
+              folder="minh-chung"
+            />
 
             {/* Action buttons */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
@@ -773,7 +872,7 @@ export const CongViecView: React.FC = () => {
                 onChange={e => setNewAssignee(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
               >
-                {nhanViens.map(nv => (
+                {assignableEmployees.map(nv => (
                   <option key={nv.MaNhanVien} value={nv.MaNhanVien}>
                     {nv.MaNhanVien} - {nv.HoTen} ({nv.TenPhongBan || 'Xưởng sản xuất'})
                   </option>
@@ -803,9 +902,10 @@ export const CongViecView: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
+                disabled={isSubmittingTask}
+                className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition disabled:opacity-50"
               >
-                Tạo công việc
+                {isSubmittingTask ? 'Đang tạo...' : 'Tạo công việc'}
               </button>
             </div>
           </form>

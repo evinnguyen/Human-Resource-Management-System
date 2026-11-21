@@ -13,19 +13,42 @@ import {
   UserCheck,
   TrendingUp,
 } from 'lucide-react';
+import { formatTrangThaiChamCong } from '@/utils/formatters';
 
 export const ChamCongView: React.FC = () => {
   const { bangChamCongs, nhanViens, currentTaiKhoan, checkInToday, checkOutToday } = useHrms();
+
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const isEmployee = userRole === 'ROLE_EMPLOYEE';
+  const isDeptLead = userRole === 'ROLE_DEPT_LEAD';
+  const isHRorAdmin = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_HR_MANAGER';
+
+  const currentEmp = nhanViens.find(n => n.MaNhanVien === currentTaiKhoan?.MaNhanVien);
+
+  // Scope: 'ALL_SCOPE' vs 'MY_ATTENDANCE'
+  const [scopeFilter, setScopeFilter] = useState<'ALL_SCOPE' | 'MY_ATTENDANCE'>(
+    isEmployee ? 'MY_ATTENDANCE' : 'ALL_SCOPE'
+  );
 
   const [filterDate, setFilterDate] = useState<string>('2024-03-14');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   const currentEmpCheckin = bangChamCongs.find(
-    b => b.MaNhanVien === currentTaiKhoan.MaNhanVien && b.Ngay === filterDate
+    b => b.MaNhanVien === currentTaiKhoan?.MaNhanVien && b.Ngay === filterDate
   );
 
   const filteredAttendance = bangChamCongs.filter(b => {
+    // Scope filter
+    if (isEmployee || scopeFilter === 'MY_ATTENDANCE') {
+      if (b.MaNhanVien !== currentTaiKhoan?.MaNhanVien) return false;
+    } else if (isDeptLead && scopeFilter === 'ALL_SCOPE') {
+      const emp = nhanViens.find(n => n.MaNhanVien === b.MaNhanVien);
+      if (emp?.MaPhongBan !== currentEmp?.MaPhongBan && b.MaNhanVien !== currentTaiKhoan?.MaNhanVien) {
+        return false;
+      }
+    }
+
     const matchesSearch =
       (b.TenNhanVien && b.TenNhanVien.toLowerCase().includes(searchTerm.toLowerCase())) ||
       b.MaNhanVien.toLowerCase().includes(searchTerm.toLowerCase());
@@ -62,13 +85,13 @@ export const ChamCongView: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => checkInToday(currentTaiKhoan.MaNhanVien)}
+            onClick={() => checkInToday(currentTaiKhoan.MaNhanVien, filterDate || undefined)}
             className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:bg-emerald-700"
           >
-            Check-in Hôm Nay
+            Check-in
           </button>
           <button
-            onClick={() => checkOutToday(currentTaiKhoan.MaNhanVien)}
+            onClick={() => checkOutToday(currentTaiKhoan.MaNhanVien, filterDate || undefined)}
             className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:bg-amber-700"
           >
             Check-out
@@ -76,24 +99,50 @@ export const ChamCongView: React.FC = () => {
         </div>
       </div>
 
+      {/* Scope switch for Managers / HR */}
+      {!isEmployee && (
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <button
+            onClick={() => setScopeFilter('ALL_SCOPE')}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+              scopeFilter === 'ALL_SCOPE'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300'
+            }`}
+          >
+            {isDeptLead ? `Bảng Chấm Công Phòng Ban (${currentEmp?.TenPhongBan || 'Ban IT'})` : 'Toàn Công Ty'}
+          </button>
+          <button
+            onClick={() => setScopeFilter('MY_ATTENDANCE')}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+              scopeFilter === 'MY_ATTENDANCE'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300'
+            }`}
+          >
+            Chấm Công Của Tôi ({bangChamCongs.filter(b => b.MaNhanVien === currentTaiKhoan?.MaNhanVien).length})
+          </button>
+        </div>
+      )}
+
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <span className="text-xs font-semibold text-slate-500">Đúng Giờ</span>
           <p className="mt-2 text-2xl font-extrabold text-emerald-600">{onTimeCount}</p>
-          <span className="text-[11px] text-slate-400">Trạng thái DUNG_GIO</span>
+          <span className="text-[11px] text-slate-400">Đúng giờ làm việc</span>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <span className="text-xs font-semibold text-slate-500">Đi Muộn</span>
           <p className="mt-2 text-2xl font-extrabold text-amber-600">{lateCount}</p>
-          <span className="text-[11px] text-slate-400">Trạng thái DI_MUON</span>
+          <span className="text-[11px] text-slate-400">Đến sau giờ chuẩn</span>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-xs font-semibold text-slate-500">Nghỉ Có Phép</span>
+          <span className="text-xs font-semibold text-slate-500">Nghỉ Phép</span>
           <p className="mt-2 text-2xl font-extrabold text-indigo-600">{leaveCount}</p>
-          <span className="text-[11px] text-slate-400">Trạng thái NGHI_PHEP</span>
+          <span className="text-[11px] text-slate-400">Nghỉ có phép</span>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -101,7 +150,7 @@ export const ChamCongView: React.FC = () => {
           <p className="mt-2 text-2xl font-extrabold text-slate-900 dark:text-white">
             {bangChamCongs.filter(b => b.DaChamCong).length}
           </p>
-          <span className="text-[11px] text-slate-400">Thuộc tính DaChamCong</span>
+          <span className="text-[11px] text-slate-400">Có mặt hôm nay</span>
         </div>
       </div>
 
@@ -127,6 +176,16 @@ export const ChamCongView: React.FC = () => {
               onChange={e => setFilterDate(e.target.value)}
               className="bg-transparent outline-none"
             />
+            {filterDate && (
+              <button
+                type="button"
+                onClick={() => setFilterDate('')}
+                className="ml-1 text-[10px] text-indigo-600 hover:underline dark:text-indigo-400"
+                title="Xem tất cả ngày"
+              >
+                Tất cả
+              </button>
+            )}
           </div>
 
           <select
@@ -188,11 +247,11 @@ export const ChamCongView: React.FC = () => {
                   <td className="py-4 px-3">
                     {b.DaChamCong ? (
                       <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Đúng
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Đã chấm công
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
-                        <XCircle className="h-3.5 w-3.5" /> Chưa
+                        <XCircle className="h-3.5 w-3.5" /> Chưa chấm công
                       </span>
                     )}
                   </td>
@@ -208,7 +267,7 @@ export const ChamCongView: React.FC = () => {
                           : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
                       }`}
                     >
-                      {b.TrangThai}
+                      {formatTrangThaiChamCong(b.TrangThai)}
                     </span>
                   </td>
                   <td className="py-4 pr-6 text-right text-slate-400 text-[11px]">

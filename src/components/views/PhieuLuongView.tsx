@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { BangLuongChiTiet, ChiTietKhoanBienDong, KhieuNaiLuong } from '@/types/hrms';
+import { formatTrangThaiKhieuNai } from '@/utils/formatters';
 import {
   Wallet,
   Receipt,
@@ -25,6 +26,7 @@ import {
   User,
   Paperclip,
 } from 'lucide-react';
+import { ProofUpload, ProofBadgeViewer } from '@/components/common/ImageUpload';
 
 export const PhieuLuongView: React.FC = () => {
   const {
@@ -32,20 +34,37 @@ export const PhieuLuongView: React.FC = () => {
     chiTietKhoanBienDongs,
     khieuNaiLuongs,
     kyLuongs,
+    nhanViens,
     currentTaiKhoan,
     addKhieuNaiLuong,
+    resolveKhieuNaiLuong,
     addChiTietKhoanBienDong,
   } = useHrms();
 
-  // Selected Payslip
-  const [selectedPayslipId, setSelectedPayslipId] = useState<string>(
-    bangLuongChiTiets[0]?.MaLuongCT || ''
-  );
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const isEmployee = userRole === 'ROLE_EMPLOYEE';
+  const isDeptLead = userRole === 'ROLE_DEPT_LEAD';
+  const isHRorAdmin = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_HR_MANAGER';
+
+  // Current logged in employee record
+  const currentEmp = nhanViens.find(n => n.MaNhanVien === currentTaiKhoan?.MaNhanVien);
+
+  // Filter visible payslips strictly based on role
+  const visiblePayslips = bangLuongChiTiets.filter(b => {
+    if (isEmployee) return b.MaNhanVien === currentTaiKhoan?.MaNhanVien;
+    if (isDeptLead) {
+      const emp = nhanViens.find(n => n.MaNhanVien === b.MaNhanVien);
+      return b.MaNhanVien === currentTaiKhoan?.MaNhanVien || emp?.MaPhongBan === currentEmp?.MaPhongBan;
+    }
+    return true; // HR/Admin sees all
+  });
 
   // Modals state
   const [showBienDongModal, setShowBienDongModal] = useState(false);
   const [showKhieuNaiModal, setShowKhieuNaiModal] = useState(false);
   const [showAddBienDongModal, setShowAddBienDongModal] = useState(false);
+  const [reviewingKhieuNai, setReviewingKhieuNai] = useState<KhieuNaiLuong | null>(null);
+  const [knPhanHoi, setKnPhanHoi] = useState('');
 
   // Khiếu nại Form State
   const [knKhoanMuc, setKnKhoanMuc] = useState('Lương làm thêm giờ (OT)');
@@ -60,8 +79,14 @@ export const PhieuLuongView: React.FC = () => {
   const [bdLyDo, setBdLyDo] = useState('');
   const [bdQuyetDinh, setBdQuyetDinh] = useState('');
 
+  // Selected Payslip
+  const [selectedPayslipId, setSelectedPayslipId] = useState<string>(
+    visiblePayslips[0]?.MaLuongCT || ''
+  );
+
+  // Keep selected payslip synchronized if list changes
   const currentPayslip =
-    bangLuongChiTiets.find(b => b.MaLuongCT === selectedPayslipId) || bangLuongChiTiets[0];
+    visiblePayslips.find(b => b.MaLuongCT === selectedPayslipId) || visiblePayslips[0];
 
   // Các khoản biến động của phiếu lương này
   const relatedBienDongs = chiTietKhoanBienDongs.filter(
@@ -126,10 +151,20 @@ export const PhieuLuongView: React.FC = () => {
     setBdQuyetDinh('');
   };
 
-  if (!currentPayslip) {
+  if (!currentPayslip || visiblePayslips.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-400">
-        Chưa có dữ liệu phiếu lương nào trong hệ thống.
+      <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl bg-indigo-50 p-4 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
+          <Wallet className="h-10 w-10" />
+        </div>
+        <h3 className="mt-4 text-lg font-bold text-slate-900 dark:text-white">
+          Chưa Có Dữ Liệu Phiếu Lương
+        </h3>
+        <p className="mt-1 text-sm text-slate-500 max-w-md">
+          {isEmployee
+            ? 'Hiện tại chưa có phiếu lương nào được phát hành cho tài khoản của bạn. Vui lòng liên hệ Phòng Nhân Sự hoặc Kế Toán để được kiểm tra.'
+            : 'Chưa có dữ liệu phiếu lương nào phù hợp với phạm vi phân quyền.'}
+        </p>
       </div>
     );
   }
@@ -159,9 +194,9 @@ export const PhieuLuongView: React.FC = () => {
             onChange={e => setSelectedPayslipId(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none"
           >
-            {bangLuongChiTiets.map(b => (
+            {visiblePayslips.map(b => (
               <option key={b.MaLuongCT} value={b.MaLuongCT}>
-                {b.TenKyLuong || b.MaKyLuong} - {b.TenNhanVien}
+                {b.TenKyLuong || b.MaKyLuong} - {b.TenNhanVien} {isEmployee ? '' : `(${b.MaNhanVien})`}
               </option>
             ))}
           </select>
@@ -219,11 +254,11 @@ export const PhieuLuongView: React.FC = () => {
                 }`}
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {currentPayslip.DaThanhToan ? 'Đã thanh toán qua ngân hàng' : 'Chờ giải ngân'}
+                {currentPayslip.DaThanhToan ? 'Đã thanh toán' : 'Chờ giải ngân'}
               </span>
               {currentPayslip.TrangThaiKhieuNai === 'DANG_KHIEU_NAI' && (
                 <p className="mt-2 text-xs font-bold text-rose-400 flex items-center justify-end gap-1">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Đang có khiếu nại chờ xử lý
+                  <AlertTriangle className="h-3.5 w-3.5" /> {formatTrangThaiKhieuNai(currentPayslip.TrangThaiKhieuNai)}
                 </p>
               )}
             </div>
@@ -371,7 +406,7 @@ export const PhieuLuongView: React.FC = () => {
                       Khoản mục: {kn.KhoanMucKhieuNai}
                     </span>
                     <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
-                      {kn.TrangThaiKN === 'CHO_XU_LY' ? 'Đang chờ xử lý' : kn.TrangThaiKN}
+                      {formatTrangThaiKhieuNai(kn.TrangThaiKN)}
                     </span>
                   </div>
                   <span className="text-xs text-slate-400">{kn.NgayGui}</span>
@@ -386,9 +421,8 @@ export const PhieuLuongView: React.FC = () => {
                 )}
 
                 {kn.MinhChung && (
-                  <div className="inline-flex items-center gap-1 text-xs text-slate-500">
-                    <Paperclip className="h-3 w-3 text-indigo-500" /> Tệp đính kèm:{' '}
-                    <span className="font-medium text-slate-700">{kn.MinhChung}</span>
+                  <div className="mt-1">
+                    <ProofBadgeViewer url={kn.MinhChung} title="Xem ảnh minh chứng" />
                   </div>
                 )}
               </div>
@@ -473,16 +507,18 @@ export const PhieuLuongView: React.FC = () => {
             </div>
 
             <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowBienDongModal(false);
-                  setShowAddBienDongModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                <Plus className="h-4 w-4" /> Thêm khoản biến động (Admin/HR)
-              </button>
+              {isHRorAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBienDongModal(false);
+                    setShowAddBienDongModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <Plus className="h-4 w-4" /> Thêm khoản biến động (Admin/HR)
+                </button>
+              ) : <div />}
 
               <button
                 type="button"
@@ -574,17 +610,14 @@ export const PhieuLuongView: React.FC = () => {
                 />
               </div>
 
-              {/* Tệp minh chứng */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Tệp tài liệu minh chứng (nếu có):</label>
-                <input
-                  type="text"
-                  placeholder="Tên file đính kèm (vd: BangChamCong_2026.pdf)"
-                  value={knMinhChung}
-                  onChange={e => setKnMinhChung(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
+              {/* Tệp / Ảnh minh chứng không cần link */}
+              <ProofUpload
+                label="Ảnh minh chứng / Tài liệu đối soát (Không cần nhập link):"
+                placeholder="Nhấn hoặc kéo thả ảnh chụp màn hình, bảng chấm công, biên nhận vào đây"
+                value={knMinhChung}
+                onChange={url => setKnMinhChung(url)}
+                folder="minh-chung"
+              />
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
@@ -643,8 +676,8 @@ export const PhieuLuongView: React.FC = () => {
                     onChange={e => setBdLoai(e.target.value as 'CONG' | 'TRU')}
                     className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
                   >
-                    <option value="CONG">+ Cộng thu nhập</option>
-                    <option value="TRU">- Khấu trừ lương</option>
+                    <option value="CONG">+ Cộng thu nhập (Thưởng / Phụ cấp)</option>
+                    <option value="TRU">- Khấu trừ lương (Phạt / Trừ khác)</option>
                   </select>
                 </div>
 

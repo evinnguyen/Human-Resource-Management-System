@@ -654,7 +654,7 @@ export const initialRoles: Role[] = [
   },
   {
     MaRole: 'ROLE_EMPLOYEE',
-    TenRole: 'Nhân Viên Tiêu Chuẩn (Employee)',
+    TenRole: 'Nhân Viên (Employee)',
     MoTa: 'Xem thông tin cá nhân, chấm công, nộp đơn nghỉ phép và tham gia đào tạo',
   },
 ];
@@ -663,6 +663,7 @@ export const initialTaiKhoans: TaiKhoan[] = [
   {
     MaTK: 'TK001',
     TenDangNhap: 'admin',
+    MatKhau: '123456',
     MaNhanVien: 'NV001',
     TenNhanVien: 'Nguyễn Văn An',
     Email: 'an.nguyen@company.vn',
@@ -675,6 +676,7 @@ export const initialTaiKhoans: TaiKhoan[] = [
   {
     MaTK: 'TK002',
     TenDangNhap: 'hrmanager',
+    MatKhau: '123456',
     MaNhanVien: 'NV003',
     TenNhanVien: 'Lê Hoàng Nam',
     Email: 'nam.le@company.vn',
@@ -687,6 +689,7 @@ export const initialTaiKhoans: TaiKhoan[] = [
   {
     MaTK: 'TK003',
     TenDangNhap: 'mai.tran',
+    MatKhau: '123456',
     MaNhanVien: 'NV002',
     TenNhanVien: 'Trần Thị Mai',
     Email: 'mai.tran@company.vn',
@@ -699,24 +702,26 @@ export const initialTaiKhoans: TaiKhoan[] = [
   {
     MaTK: 'TK004',
     TenDangNhap: 'tuan.do',
+    MatKhau: '123456',
     MaNhanVien: 'NV006',
     TenNhanVien: 'Đỗ Minh Tuấn',
     Email: 'tuan.do@company.vn',
     TrangThaiTK: 'HOAT_DONG',
     MaRole: 'ROLE_EMPLOYEE',
-    TenRole: 'Nhân Viên Tiêu Chuẩn (Employee)',
+    TenRole: 'Nhân Viên (Employee)',
     NgayTao: '2022-04-12',
     LanDangNhapCuoi: '2024-03-14 07:55:01',
   },
   {
     MaTK: 'TK005',
     TenDangNhap: 'phuong.hoang',
+    MatKhau: '123456',
     MaNhanVien: 'NV007',
     TenNhanVien: 'Hoàng Bích Phương',
     Email: 'phuong.hoang@company.vn',
     TrangThaiTK: 'HOAT_DONG',
     MaRole: 'ROLE_EMPLOYEE',
-    TenRole: 'Nhân Viên Tiêu Chuẩn (Employee)',
+    TenRole: 'Nhân Viên (Employee)',
     NgayTao: '2023-02-01',
     LanDangNhapCuoi: '2024-03-14 08:12:19',
   },

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { NhanVien } from '@/types/hrms';
+import { formatTrangThaiLamViec } from '@/utils/formatters';
 import { AddEmployeeModal } from './AddEmployeeModal';
 import { EmployeeDetailModal } from './EmployeeDetailModal';
 import {
@@ -25,7 +26,22 @@ import {
 } from 'lucide-react';
 
 export const NhanVienView: React.FC = () => {
-  const { nhanViens, phongBans, chucDanhs, deleteNhanVien } = useHrms();
+  const {
+    nhanViens,
+    phongBans,
+    chucDanhs,
+    hopDongs,
+    bangChamCongs,
+    bangLuongChiTiets,
+    congViecs,
+    donNghiPheps,
+    currentTaiKhoan,
+    deleteNhanVien,
+    updateNhanVien,
+  } = useHrms();
+
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const canManageEmployees = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_HR_MANAGER';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPhongBan, setSelectedPhongBan] = useState<string>('ALL');
@@ -35,6 +51,56 @@ export const NhanVienView: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<NhanVien | null>(null);
   const [detailEmployee, setDetailEmployee] = useState<NhanVien | null>(null);
+
+  // Hàm xử lý xóa an toàn: Kiểm tra vai trò Trưởng phòng & bảo vệ dữ liệu lịch sử liên kết (Soft Delete)
+  const handleDeleteEmployee = (emp: NhanVien) => {
+    // 1. Chặn xóa nếu đang là Trưởng phòng
+    const leadingDept = phongBans.find(p => p.MaTruongPhong === emp.MaNhanVien);
+    if (leadingDept) {
+      alert(
+        `KHÔNG THỂ XÓA!\n\nNhân viên ${emp.HoTen} (${emp.MaNhanVien}) hiện đang là TRƯỞNG PHÒNG của: "${leadingDept.TenPhongBan}".\n\nVui lòng vào tab "Cơ Cấu Tổ Chức" để bổ nhiệm Trưởng phòng mới trước khi xóa hoặc cho thôi việc!`
+      );
+      return;
+    }
+
+    // 2. Kiểm tra các ràng buộc dữ liệu lịch sử liên kết
+    const hasContracts = hopDongs.some(h => h.MaNhanVien === emp.MaNhanVien);
+    const hasAttendance = bangChamCongs.some(c => c.MaNhanVien === emp.MaNhanVien);
+    const hasPayroll = bangLuongChiTiets.some(p => p.MaNhanVien === emp.MaNhanVien);
+    const hasTasks = congViecs.some(t => t.MaNhanVien === emp.MaNhanVien);
+    const hasLeaves = donNghiPheps.some(d => d.MaNhanVien === emp.MaNhanVien);
+
+    const hasHistory = hasContracts || hasAttendance || hasPayroll || hasTasks || hasLeaves;
+
+    if (hasHistory) {
+      const confirmSoftDelete = confirm(
+        `CẢNH BÁO BẢO TOÀN DỮ LIỆU LIÊN KẾT:\n\nNhân viên ${emp.HoTen} (${emp.MaNhanVien}) đã có dữ liệu lịch sử trong hệ thống:\n` +
+        `${hasContracts ? '• Hợp đồng lao động\n' : ''}` +
+        `${hasAttendance ? '• Bảng điểm danh / chấm công\n' : ''}` +
+        `${hasPayroll ? '• Bảng lương & thuế / bảo hiểm\n' : ''}` +
+        `${hasTasks ? '• Công việc được giao\n' : ''}` +
+        `${hasLeaves ? '• Đơn xin nghỉ phép\n' : ''}` +
+        `\nNếu xóa vĩnh viễn (Hard Delete), các báo cáo tài chính, thuế và chấm công quá khứ sẽ bị mồ côi dữ liệu (Lỗi Foreign Key).\n\n` +
+        `Hệ thống sẽ chuyển nhân viên sang chế độ "ĐÃ THÔI VIỆC" (Soft Delete) để bảo toàn lịch sử kế toán.\n\n` +
+        `Bạn có đồng ý chuyển nhân viên sang trạng thái "Đã thôi việc" không?`
+      );
+
+      if (confirmSoftDelete) {
+        updateNhanVien(emp.MaNhanVien, {
+          TrangThaiLamViec: 'DA_NGHI_VIEC',
+        });
+      }
+    } else {
+      // Nhân viên mới chưa có bất kỳ dữ liệu ràng buộc nào -> Xóa vĩnh viễn an toàn
+      if (
+        confirm(
+          `Nhân viên ${emp.HoTen} (${emp.MaNhanVien}) chưa có dữ liệu lịch sử phát sinh.\n\nBạn có chắc chắn muốn xóa vĩnh viễn hồ sơ này khỏi hệ thống?`
+        )
+      ) {
+        deleteNhanVien(emp.MaNhanVien);
+      }
+    }
+  };
 
   // Filtered employees
   const filteredEmployees = nhanViens.filter(nv => {
@@ -114,16 +180,18 @@ export const NhanVienView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingEmployee(null);
-            setIsAddModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700"
-        >
-          <UserPlus className="h-4 w-4" />
-          Thêm Nhân Viên Mới
-        </button>
+        {canManageEmployees && (
+          <button
+            onClick={() => {
+              setEditingEmployee(null);
+              setIsAddModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700"
+          >
+            <UserPlus className="h-4 w-4" />
+            Thêm Nhân Viên Mới
+          </button>
+        )}
       </div>
 
       {/* Filter and View mode switcher bar */}
@@ -298,11 +366,7 @@ export const NhanVienView: React.FC = () => {
                             : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                         }`}
                       >
-                        {emp.TrangThaiLamViec === 'DANG_LAM_VIEC'
-                          ? 'Chính Thức'
-                          : emp.TrangThaiLamViec === 'THU_VIEC'
-                          ? 'Thử Việc'
-                          : 'Nghỉ Phép'}
+                        {formatTrangThaiLamViec(emp.TrangThaiLamViec)}
                       </span>
                     </td>
 
@@ -315,27 +379,27 @@ export const NhanVienView: React.FC = () => {
                         >
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => {
-                            setEditingEmployee(emp);
-                            setIsAddModalOpen(true);
-                          }}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Bạn có chắc chắn muốn xóa nhân viên ${emp.HoTen}?`)) {
-                              deleteNhanVien(emp.MaNhanVien);
-                            }
-                          }}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
-                          title="Xóa"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canManageEmployees && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingEmployee(emp);
+                                setIsAddModalOpen(true);
+                              }}
+                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800"
+                              title="Chỉnh sửa"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(emp)}
+                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+                              title="Xóa / Thôi việc"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -386,7 +450,7 @@ export const NhanVienView: React.FC = () => {
                         : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                     }`}
                   >
-                    {emp.TrangThaiLamViec}
+                    {formatTrangThaiLamViec(emp.TrangThaiLamViec)}
                   </span>
                 </div>
 
@@ -445,6 +509,7 @@ export const NhanVienView: React.FC = () => {
 
       {/* Modals */}
       <AddEmployeeModal
+        key={editingEmployee ? `edit-${editingEmployee.MaNhanVien}` : 'new-employee'}
         isOpen={isAddModalOpen}
         onClose={() => {
           setIsAddModalOpen(false);

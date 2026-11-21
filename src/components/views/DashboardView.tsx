@@ -3,6 +3,7 @@
 import React from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { TabId } from '@/components/Sidebar';
+import { formatTrangThaiDonNP } from '@/utils/formatters';
 import {
   Users,
   Building2,
@@ -32,6 +33,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     bangChamCongs,
     nhatKyHoatDongs,
     khoaDaoTaos,
+    currentTaiKhoan,
     approveDonNghiPhep,
     rejectDonNghiPhep,
   } = useHrms();
@@ -48,7 +50,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const checkedInCount = todayAttendance.filter(c => c.DaChamCong).length;
   const lateCount = todayAttendance.filter(c => c.TrangThai === 'DI_MUON').length;
 
-  const pendingLeaves = donNghiPheps.filter(d => d.TrangThaiDNP === 'CHO_DUYET');
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const isDeptLead = userRole === 'ROLE_DEPT_LEAD';
+  const isHRorAdmin = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_HR_MANAGER';
+  const currentEmp = nhanViens.find(n => n.MaNhanVien === currentTaiKhoan?.MaNhanVien);
+
+  // Filter pending leaves that the current user has authority to approve:
+  const pendingLeaves = donNghiPheps.filter(d => {
+    if (d.TrangThaiDNP !== 'CHO_DUYET') return false;
+    // Cannot approve own leave request
+    if (d.MaNhanVien === currentTaiKhoan?.MaNhanVien) return false;
+    if (isHRorAdmin) return true;
+    if (isDeptLead) {
+      const emp = nhanViens.find(n => n.MaNhanVien === d.MaNhanVien);
+      return emp?.MaPhongBan === currentEmp?.MaPhongBan;
+    }
+    return false;
+  });
+
   const activeContracts = hopDongs.filter(h => h.TrangThaiHopDong === 'CON_HIEU_LUC');
 
   const totalPayroll = activeContracts.reduce((sum, h) => sum + h.MucLuong, 0);
@@ -61,13 +80,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur-md">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            Hệ thống Quản Trị Nhân Sự Trực Tuyến
+            {currentTaiKhoan?.TenRole || 'Quản Trị Hệ Thống'}
           </div>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Chào mừng trở lại
+          <h2 className="mt-4 text-2xl font-extrabold tracking-tight sm:text-3xl">
+            Xin chào, {currentTaiKhoan?.TenNhanVien || currentTaiKhoan?.TenDangNhap}!
           </h2>
           <p className="mt-2 text-sm text-indigo-200">
-            Hệ thống được thiết kế với đầy đủ các nghiệp vụ quản lý nhân sự, cơ cấu tổ chức, hợp đồng, chấm công, nghỉ phép và đào tạo.
+            Hệ thống Quản Trị Nhân Sự & Phân Quyền Doanh Nghiệp. Chúc bạn một ngày làm việc hiệu quả!
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <button
@@ -151,7 +170,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Đơn Nghỉ Phép Chờ Duyệt
+              Đơn Nghỉ Phép (Chờ duyệt)
             </span>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
               <CalendarDays className="h-5 w-5" />
@@ -161,7 +180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
               {pendingLeaves.length}
             </span>
-            <span className="text-xs font-medium text-amber-600">Cần xử lý</span>
+            <span className="text-xs font-medium text-amber-600">Cần phê duyệt</span>
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 pt-3 dark:border-slate-800">
             <span>Đã duyệt tháng này: {donNghiPheps.filter(d => d.TrangThaiDNP === 'DA_DUYET').length}</span>
@@ -205,10 +224,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white">
-                Đơn Nghỉ Phép Chờ Phê Duyệt
+                {isDeptLead
+                  ? `Đơn Nghỉ Phép Chờ Duyệt - ${currentEmp?.TenPhongBan || 'Phòng Ban'}`
+                  : 'Đơn Nghỉ Phép Chờ Phê Duyệt'}
               </h3>
               <p className="text-xs text-slate-500">
-                Danh sách đơn xin nghỉ phép chờ người quản lý phê duyệt
+                {isDeptLead
+                  ? 'Danh sách đơn xin nghỉ phép của nhân sự thuộc phòng ban chờ bạn phê duyệt'
+                  : 'Danh sách đơn xin nghỉ phép chờ người quản lý / nhân sự phê duyệt'}
               </p>
             </div>
             <button
@@ -235,8 +258,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                         <span className="font-bold text-slate-900 dark:text-white text-sm">
                           {don.TenNhanVien}
                         </span>
-                        <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        <span className="font-mono text-xs text-slate-400">
                           {don.MaDonNP}
+                        </span>
+                        <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                          {formatTrangThaiDonNP(don.TrangThaiDNP)}
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">

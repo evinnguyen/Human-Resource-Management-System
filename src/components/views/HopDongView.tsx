@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { HopDong, TrangThaiHopDong } from '@/types/hrms';
+import { formatTrangThaiHopDong } from '@/utils/formatters';
 import {
   FileSignature,
   Plus,
@@ -52,6 +53,22 @@ export const HopDongView: React.FC = () => {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.MucLuong <= 0) {
+      alert('Mức lương hợp đồng phải lớn hơn 0!');
+      return;
+    }
+    if (formData.NgayKetThuc && formData.NgayBatDau && new Date(formData.NgayKetThuc) < new Date(formData.NgayBatDau)) {
+      alert('Ngày kết thúc hợp đồng không được trước ngày bắt đầu!');
+      return;
+    }
+    const hasActiveContract = hopDongs.some(
+      h => h.MaNhanVien === formData.MaNhanVien && h.TrangThaiHopDong === 'CON_HIEU_LUC'
+    );
+    if (hasActiveContract && formData.TrangThaiHopDong === 'CON_HIEU_LUC') {
+      if (!confirm('Nhân viên này hiện đã có một hợp đồng CÒN HIỆU LỰC trong hệ thống. Bạn có chắc chắn muốn tạo thêm hợp đồng hiệu lực mới?')) {
+        return;
+      }
+    }
     addHopDong(formData);
     setIsAddModalOpen(false);
   };
@@ -86,7 +103,7 @@ export const HopDongView: React.FC = () => {
           <p className="mt-2 text-2xl font-extrabold text-slate-900 dark:text-white">
             {hopDongs.filter(h => h.TrangThaiHopDong === 'CON_HIEU_LUC').length}
           </p>
-          <span className="text-[11px] text-emerald-600 font-medium">Đang áp dụng</span>
+          <span className="text-[11px] text-emerald-600 font-medium">Còn hiệu lực</span>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -186,8 +203,16 @@ export const HopDongView: React.FC = () => {
                     {hd.MucLuong.toLocaleString('vi-VN')} đ
                   </td>
                   <td className="py-4 px-3">
-                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                      {hd.TrangThaiHopDong}
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                        hd.TrangThaiHopDong === 'CON_HIEU_LUC'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                          : hd.TrangThaiHopDong === 'CHO_DUYET'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                          : 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300'
+                      }`}
+                    >
+                      {formatTrangThaiHopDong(hd.TrangThaiHopDong)}
                     </span>
                   </td>
                   <td className="py-4 pr-6 text-right text-slate-500 text-[11px]">

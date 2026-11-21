@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { PhongBan, ChucDanh } from '@/types/hrms';
+import { formatTrangThaiLamViec } from '@/utils/formatters';
 import {
   Building2,
   Briefcase,
@@ -13,18 +14,89 @@ import {
   ChevronRight,
   Shield,
   Layers,
+  X,
 } from 'lucide-react';
 
 export const PhongBanChucDanhView: React.FC = () => {
-  const { phongBans, chucDanhs, nhanViens } = useHrms();
+  const { phongBans, chucDanhs, nhanViens, addPhongBan, addChucDanh } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'phong-ban' | 'chuc-danh'>('phong-ban');
   const [selectedDept, setSelectedDept] = useState<PhongBan | null>(phongBans[0] || null);
+
+  // Modal states
+  const [isAddDeptOpen, setIsAddDeptOpen] = useState(false);
+  const [isAddChucDanhOpen, setIsAddChucDanhOpen] = useState(false);
+
+  const [deptForm, setDeptForm] = useState({
+    TenPhongBan: '',
+    MoTa: '',
+    MaTruongPhong: '',
+    TenTruongPhong: '',
+  });
+
+  const [chucDanhForm, setChucDanhForm] = useState({
+    TenChucDanh: '',
+    MaPhongBan: phongBans[0]?.MaPhongBan || 'PB01',
+    CapBac: 'Chuyên viên',
+  });
 
   // Employees in currently selected department
   const deptEmployees = selectedDept
     ? nhanViens.filter(n => n.MaPhongBan === selectedDept.MaPhongBan)
     : [];
+
+  const handleCreateDept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deptForm.TenPhongBan.trim()) {
+      alert('Vui lòng nhập tên phòng ban');
+      return;
+    }
+    const isDup = phongBans.some(
+      p => p.TenPhongBan.trim().toLowerCase() === deptForm.TenPhongBan.trim().toLowerCase()
+    );
+    if (isDup) {
+      alert('Tên phòng ban này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.');
+      return;
+    }
+    const leader = nhanViens.find(n => n.MaNhanVien === deptForm.MaTruongPhong);
+    await addPhongBan({
+      TenPhongBan: deptForm.TenPhongBan.trim(),
+      MoTa: deptForm.MoTa.trim(),
+      MaTruongPhong: deptForm.MaTruongPhong || undefined,
+      TenTruongPhong: leader?.HoTen || undefined,
+    });
+    setDeptForm({ TenPhongBan: '', MoTa: '', MaTruongPhong: '', TenTruongPhong: '' });
+    setIsAddDeptOpen(false);
+  };
+
+  const handleCreateChucDanh = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chucDanhForm.TenChucDanh.trim()) {
+      alert('Vui lòng nhập tên chức danh');
+      return;
+    }
+    const isDup = chucDanhs.some(
+      c => c.MaPhongBan === chucDanhForm.MaPhongBan &&
+           c.TenChucDanh.trim().toLowerCase() === chucDanhForm.TenChucDanh.trim().toLowerCase()
+    );
+    if (isDup) {
+      alert('Chức danh này đã tồn tại trong phòng ban đã chọn!');
+      return;
+    }
+    const pb = phongBans.find(p => p.MaPhongBan === chucDanhForm.MaPhongBan);
+    await addChucDanh({
+      TenChucDanh: chucDanhForm.TenChucDanh.trim(),
+      MaPhongBan: chucDanhForm.MaPhongBan,
+      TenPhongBan: pb?.TenPhongBan || '',
+      CapBac: chucDanhForm.CapBac,
+    });
+    setChucDanhForm({
+      TenChucDanh: '',
+      MaPhongBan: phongBans[0]?.MaPhongBan || 'PB01',
+      CapBac: 'Chuyên viên',
+    });
+    setIsAddChucDanhOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -40,28 +112,46 @@ export const PhongBanChucDanhView: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab switch */}
-        <div className="flex rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800">
-          <button
-            onClick={() => setActiveTab('phong-ban')}
-            className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
-              activeTab === 'phong-ban'
-                ? 'bg-white text-indigo-600 shadow dark:bg-slate-700 dark:text-white'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            Phòng Ban ({phongBans.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('chuc-danh')}
-            className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
-              activeTab === 'chuc-danh'
-                ? 'bg-white text-indigo-600 shadow dark:bg-slate-700 dark:text-white'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            Chức Danh ({chucDanhs.length})
-          </button>
+        {/* Tab switch and Add button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800">
+            <button
+              onClick={() => setActiveTab('phong-ban')}
+              className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
+                activeTab === 'phong-ban'
+                  ? 'bg-white text-indigo-600 shadow dark:bg-slate-700 dark:text-white'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              Phòng Ban ({phongBans.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('chuc-danh')}
+              className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
+                activeTab === 'chuc-danh'
+                  ? 'bg-white text-indigo-600 shadow dark:bg-slate-700 dark:text-white'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              Chức Danh ({chucDanhs.length})
+            </button>
+          </div>
+
+          {activeTab === 'phong-ban' ? (
+            <button
+              onClick={() => setIsAddDeptOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" /> Thêm Phòng Ban
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAddChucDanhOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" /> Thêm Chức Danh
+            </button>
+          )}
         </div>
       </div>
 
@@ -185,8 +275,16 @@ export const PhongBanChucDanhView: React.FC = () => {
                             <td className="p-3 text-slate-700 dark:text-slate-300">{emp.TenChucDanh}</td>
                             <td className="p-3 text-slate-500">{emp.Email}</td>
                             <td className="p-3">
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                {emp.TrangThaiLamViec}
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  emp.TrangThaiLamViec === 'DANG_LAM_VIEC'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                    : emp.TrangThaiLamViec === 'THU_VIEC'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                }`}
+                              >
+                                {formatTrangThaiLamViec(emp.TrangThaiLamViec)}
                               </span>
                             </td>
                           </tr>
@@ -251,6 +349,166 @@ export const PhongBanChucDanhView: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {/* Modal Add Department */}
+      {isAddDeptOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-indigo-600" /> Thêm Phòng Ban Mới
+              </h3>
+              <button
+                onClick={() => setIsAddDeptOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateDept} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Tên Phòng Ban *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Phòng Nghiên Cứu & Phát Triển (R&D)"
+                  value={deptForm.TenPhongBan}
+                  onChange={e => setDeptForm({ ...deptForm, TenPhongBan: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Mô Tả Chức Năng
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Mô tả chức năng nhiệm vụ..."
+                  value={deptForm.MoTa}
+                  onChange={e => setDeptForm({ ...deptForm, MoTa: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Bổ Nhiệm Trưởng Phòng
+                </label>
+                <select
+                  value={deptForm.MaTruongPhong}
+                  onChange={e => setDeptForm({ ...deptForm, MaTruongPhong: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="">Chưa bổ nhiệm</option>
+                  {nhanViens.map(n => (
+                    <option key={n.MaNhanVien} value={n.MaNhanVien}>
+                      {n.HoTen} ({n.MaNhanVien}) - {n.TenChucDanh}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddDeptOpen(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-700"
+                >
+                  Lưu Phòng Ban
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Chuc Danh */}
+      {isAddChucDanhOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-indigo-600" /> Thêm Chức Danh Mới
+              </h3>
+              <button
+                onClick={() => setIsAddChucDanhOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateChucDanh} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Tên Chức Danh *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Kỹ sư DevOps, Chuyên viên QA..."
+                  value={chucDanhForm.TenChucDanh}
+                  onChange={e => setChucDanhForm({ ...chucDanhForm, TenChucDanh: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Phòng Ban Trực Thuộc
+                </label>
+                <select
+                  value={chucDanhForm.MaPhongBan}
+                  onChange={e => setChucDanhForm({ ...chucDanhForm, MaPhongBan: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                >
+                  {phongBans.map(p => (
+                    <option key={p.MaPhongBan} value={p.MaPhongBan}>
+                      {p.TenPhongBan} ({p.MaPhongBan})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Cấp Bậc (Level)
+                </label>
+                <select
+                  value={chucDanhForm.CapBac}
+                  onChange={e => setChucDanhForm({ ...chucDanhForm, CapBac: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="Ban Giám Đốc">Ban Giám Đốc</option>
+                  <option value="Trưởng Phòng">Trưởng Phòng</option>
+                  <option value="Phó Phòng">Phó Phòng</option>
+                  <option value="Chuyên viên cao cấp">Chuyên viên cao cấp</option>
+                  <option value="Chuyên viên">Chuyên viên</option>
+                  <option value="Nhân viên">Nhân viên</option>
+                  <option value="Thực tập sinh">Thực tập sinh</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddChucDanhOpen(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-700"
+                >
+                  Lưu Chức Danh
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

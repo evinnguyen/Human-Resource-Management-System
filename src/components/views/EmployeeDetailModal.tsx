@@ -4,6 +4,12 @@ import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { NhanVien } from '@/types/hrms';
 import {
+  formatTrangThaiLamViec,
+  formatTrangThaiHopDong,
+  formatTrangThaiChamCong,
+  formatTrangThaiDonNP,
+} from '@/utils/formatters';
+import {
   X,
   User,
   Building2,
@@ -21,7 +27,10 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Camera,
+  Loader2,
 } from 'lucide-react';
+import { uploadApi } from '@/services/api';
 
 interface EmployeeDetailModalProps {
   isOpen: boolean;
@@ -43,9 +52,33 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
     bangChamCongs,
     quaTrinhDaoTaos,
     taiLieus,
+    currentTaiKhoan,
+    updateNhanVien,
   } = useHrms();
 
+  const userRole = currentTaiKhoan?.MaRole || 'ROLE_EMPLOYEE';
+  const canEditThisProfile =
+    ['ROLE_ADMIN', 'ROLE_HR_MANAGER'].includes(userRole) ||
+    currentTaiKhoan?.MaNhanVien === employee?.MaNhanVien;
+
   const [activeTab, setActiveTab] = useState<'info' | 'contracts' | 'attendance' | 'leaves' | 'training' | 'documents'>('info');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !employee) return;
+    try {
+      setIsUploadingAvatar(true);
+      const res = await uploadApi.uploadFile(file, 'avatars');
+      await updateNhanVien(employee.MaNhanVien, { ...employee, Avatar: res.url });
+    } catch (err: any) {
+      alert('Lỗi cập nhật ảnh đại diện: ' + (err?.message || 'Không thể tải ảnh lên'));
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
 
   if (!isOpen || !employee) return null;
 
@@ -80,11 +113,33 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
           </button>
 
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-            <img
-              src={employee.Avatar}
-              alt={employee.HoTen}
-              className="h-24 w-24 rounded-2xl object-cover ring-4 ring-white/20 shadow-xl"
+            <input
+              type="file"
+              ref={avatarInputRef}
+              onChange={handleAvatarFile}
+              accept="image/*"
+              className="hidden"
             />
+            <div
+              onClick={() => !isUploadingAvatar && avatarInputRef.current?.click()}
+              className="relative group h-24 w-24 rounded-2xl overflow-hidden ring-4 ring-white/20 shadow-xl cursor-pointer flex-shrink-0"
+              title="Nhấn để đổi ảnh đại diện trực tiếp"
+            >
+              <img
+                src={employee.Avatar}
+                alt={employee.HoTen}
+                className="h-full w-full object-cover group-hover:scale-105 transition"
+              />
+              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white">
+                <Camera className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] font-bold">Đổi ảnh</span>
+              </div>
+              {isUploadingAvatar && (
+                <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-white" />
+                </div>
+              )}
+            </div>
             <div className="text-center sm:text-left flex-1">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                 <h2 className="text-2xl font-extrabold">{employee.HoTen}</h2>
@@ -100,11 +155,7 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
                       : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                   }`}
                 >
-                  {employee.TrangThaiLamViec === 'DANG_LAM_VIEC'
-                    ? 'Chính Thức'
-                    : employee.TrangThaiLamViec === 'THU_VIEC'
-                    ? 'Thử Việc'
-                    : 'Nghỉ Phép'}
+                  {formatTrangThaiLamViec(employee.TrangThaiLamViec)}
                 </span>
               </div>
 
@@ -135,17 +186,19 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
               </div>
             </div>
 
-            <div className="self-center sm:self-start">
-              <button
-                onClick={() => {
-                  onClose();
-                  onEdit(employee);
-                }}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:bg-indigo-500"
-              >
-                Chỉnh Sửa
-              </button>
-            </div>
+            {canEditThisProfile && (
+              <div className="self-center sm:self-start">
+                <button
+                  onClick={() => {
+                    onClose();
+                    onEdit(employee);
+                  }}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:bg-indigo-500"
+                >
+                  Chỉnh Sửa
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -353,7 +406,7 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
                         </span>
                       </div>
                       <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                        {hd.TrangThaiHopDong}
+                        {formatTrangThaiHopDong(hd.TrangThaiHopDong)}
                       </span>
                     </div>
 
@@ -411,7 +464,7 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
                         <td className="p-3">{b.SoGioLam || 0}h</td>
                         <td className="p-3">
                           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            {b.TrangThai}
+                            {formatTrangThaiChamCong(b.TrangThai)}
                           </span>
                         </td>
                       </tr>
@@ -452,7 +505,7 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
                             : 'bg-rose-100 text-rose-800'
                         }`}
                       >
-                        {don.TrangThaiDNP}
+                        {formatTrangThaiDonNP(don.TrangThaiDNP)}
                       </span>
                     </div>
                     <p className="mt-1 text-slate-700 dark:text-slate-300">

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useHrms } from '@/context/HrmsContext';
 import { TaiKhoan, Role, Quyen } from '@/types/hrms';
+import { formatTrangThaiTaiKhoan } from '@/utils/formatters';
 import {
   ShieldAlert,
   Key,
@@ -25,8 +26,10 @@ export const HeThongPhanQuyenView: React.FC = () => {
     quyens,
     nhatKyHoatDongs,
     nhanViens,
+    currentTaiKhoan,
     addTaiKhoan,
     toggleTaiKhoanStatus,
+    resetMatKhau,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'tai-khoan' | 'vai-tro-quyen' | 'nhat-ky'>('tai-khoan');
@@ -36,6 +39,7 @@ export const HeThongPhanQuyenView: React.FC = () => {
   // New account state
   const [accountForm, setAccountForm] = useState({
     TenDangNhap: '',
+    MatKhau: '123456',
     MaNhanVien: nhanViens[0]?.MaNhanVien || 'NV001',
     MaRole: roles[0]?.MaRole || 'ROLE_EMPLOYEE',
     TrangThaiTK: 'HOAT_DONG' as const,
@@ -43,18 +47,32 @@ export const HeThongPhanQuyenView: React.FC = () => {
 
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accountForm.TenDangNhap) {
+    if (!accountForm.TenDangNhap.trim()) {
       alert('Vui lòng nhập tên đăng nhập');
       return;
     }
+    const exists = taiKhoans.some(t => t.TenDangNhap.toLowerCase() === accountForm.TenDangNhap.trim().toLowerCase());
+    if (exists) {
+      alert(`Tên đăng nhập "${accountForm.TenDangNhap}" đã tồn tại trên hệ thống! Vui lòng chọn tên khác.`);
+      return;
+    }
+
     addTaiKhoan(accountForm);
     setIsAddAccountModalOpen(false);
     setAccountForm({
       TenDangNhap: '',
+      MatKhau: '123456',
       MaNhanVien: nhanViens[0]?.MaNhanVien || 'NV001',
       MaRole: roles[0]?.MaRole || 'ROLE_EMPLOYEE',
       TrangThaiTK: 'HOAT_DONG',
     });
+  };
+
+  const handleResetPassword = async (maTK: string, username: string) => {
+    if (confirm(`Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản @${username} về "123456"?`)) {
+      const res = await resetMatKhau(maTK, '123456');
+      alert(res.message || 'Đặt lại mật khẩu thành công!');
+    }
   };
 
   const filteredLogs = nhatKyHoatDongs.filter(log =>
@@ -165,7 +183,7 @@ export const HeThongPhanQuyenView: React.FC = () => {
                             : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                         }`}
                       >
-                        {tk.TrangThaiTK === 'HOAT_DONG' ? 'Đang hoạt động' : 'Đã bị khóa'}
+                        {formatTrangThaiTaiKhoan(tk.TrangThaiTK)}
                       </span>
                     </td>
                     <td className="py-4 px-3 text-slate-500">
@@ -175,24 +193,41 @@ export const HeThongPhanQuyenView: React.FC = () => {
                       </p>
                     </td>
                     <td className="py-4 pr-6 text-right">
-                      <button
-                        onClick={() => toggleTaiKhoanStatus(tk.MaTK)}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                          tk.TrangThaiTK === 'HOAT_DONG'
-                            ? 'border border-rose-200 text-rose-600 hover:bg-rose-50'
-                            : 'border border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {tk.TrangThaiTK === 'HOAT_DONG' ? (
-                          <>
-                            <Lock className="h-3 w-3" /> Khóa
-                          </>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleResetPassword(tk.MaTK, tk.TenDangNhap)}
+                          title="Đặt lại mật khẩu về mặc định (123456)"
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <Key className="h-3 w-3 text-amber-500" />
+                          <span className="hidden sm:inline">Reset Pass</span>
+                        </button>
+
+                        {tk.MaTK === currentTaiKhoan?.MaTK ? (
+                          <span className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-400 dark:bg-slate-800">
+                            Đang dùng
+                          </span>
                         ) : (
-                          <>
-                            <Unlock className="h-3 w-3" /> Mở khóa
-                          </>
+                          <button
+                            onClick={() => toggleTaiKhoanStatus(tk.MaTK)}
+                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                              tk.TrangThaiTK === 'HOAT_DONG'
+                                ? 'border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/40 dark:text-rose-400'
+                                : 'border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/40 dark:text-emerald-400'
+                            }`}
+                          >
+                            {tk.TrangThaiTK === 'HOAT_DONG' ? (
+                              <>
+                                <Lock className="h-3 w-3" /> Khóa
+                              </>
+                            ) : (
+                              <>
+                                <Unlock className="h-3 w-3" /> Mở khóa
+                              </>
+                            )}
+                          </button>
                         )}
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -347,6 +382,19 @@ export const HeThongPhanQuyenView: React.FC = () => {
                   placeholder="username..."
                   value={accountForm.TenDangNhap}
                   onChange={e => setAccountForm({ ...accountForm, TenDangNhap: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-900 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Mật Khẩu Ban Đầu (Mặc định: 123456)
+                </label>
+                <input
+                  type="text"
+                  placeholder="123456"
+                  value={accountForm.MatKhau}
+                  onChange={e => setAccountForm({ ...accountForm, MatKhau: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-900 dark:border-slate-800 dark:bg-slate-800 dark:text-white"
                 />
               </div>
